@@ -280,6 +280,7 @@
       <button class="primary" id="setTest">この声でためす</button>
     </div>
     <p class="note">
+      効果音と録音の再生は、マナーモード中でも鳴るようにしてあります（読み上げの声はマナーモード中は鳴らないことがあります）。
       実際に聞こえる大きさは「ここの音量 × iPhone本体の音量」で決まります。
       しっかり聞こえるようにするには、本体横の音量ボタンも上げておいてください。
       音が出ないときは、本体横のスイッチ（マナーモード）を解除して、音量を上げてください。
@@ -393,13 +394,33 @@
   function dogTalk(on) { $('dogAvatar').classList.toggle('talking', !!on); }
 
   // ---------- 効果音（プログラム合成・音声ファイル不要） ----------
-  var actx = null;
+  var actx = null, sfxDest = null, sfxEl = null;
   function ac() {
     var A = window.AudioContext || window.webkitAudioContext;
     if (!A) return null;
-    if (!actx) actx = new A();
+    if (!actx) {
+      actx = new A();
+      // 動画再生と同じ経路（audio要素）に流すことで、マナーモード中でも効果音が鳴るようにする
+      sfxDest = actx.createMediaStreamDestination ? actx.createMediaStreamDestination() : null;
+      if (sfxDest) {
+        if (!sfxEl) {
+          sfxEl = new Audio();
+          sfxEl.setAttribute('playsinline', '');
+        }
+        sfxEl.srcObject = sfxDest.stream;
+      }
+    }
     if (actx.state === 'suspended') actx.resume();
+    if (sfxEl && sfxDest && sfxEl.paused) {
+      var p = sfxEl.play();
+      if (p && p.catch) p.catch(function () {});
+    }
     return actx;
+  }
+  function sfxOut(a) { return sfxDest || a.destination; }
+  function resetAc() {
+    try { if (actx) actx.close(); } catch (e) {}
+    actx = null; sfxDest = null;
   }
   function envGain(a, t0, dur, vol) {
     var g = a.createGain();
@@ -407,7 +428,7 @@
     g.gain.setValueAtTime(0.001, t0);
     g.gain.exponentialRampToValueAtTime(v, t0 + 0.015);
     g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-    g.connect(a.destination);
+    g.connect(sfxOut(a));
     return g;
   }
   function beep(a, freq, t0, dur, type, vol) {
@@ -441,15 +462,23 @@
     { id: 'chin', name: 'チーン', len: 1600, run: function (a, t) { beep(a, 2093, t, 1.4, 'sine', 0.4); beep(a, 4186, t, 0.7, 'sine', 0.12); } },
     { id: 'fanfare', name: 'ファンファーレ', len: 1900, run: function (a, t) { [523, 659, 784, 1047].forEach(function (f, i) { beep(a, f, t + i * 0.18, i === 3 ? 0.8 : 0.2, 'triangle', 0.45); }); beep(a, 1319, t + 0.9, 0.7, 'triangle', 0.35); } }
   ];
-  function playSfx(id, btn) {
+  function playSfx(id, btn, retried) {
     var a = ac();
     if (!a) { toast('この端末では効果音が使えません'); return; }
     var s = SFX.filter(function (x) { return x.id === id; })[0];
     if (!s) return;
-    s.run(a, a.currentTime + 0.03);
+    var mark = a.currentTime;
+    s.run(a, a.currentTime + 0.05);
     dogTalk(true);
     if (btn) btn.classList.add('speaking');
     setTimeout(function () { dogTalk(false); if (btn) btn.classList.remove('speaking'); }, s.len);
+    // 音の内部時計が止まっていたら（録音後にiPhoneで起きる現象）作り直して1回だけ再挑戦
+    setTimeout(function () {
+      if (!retried && actx === a && a.currentTime <= mark + 0.001) {
+        resetAc();
+        playSfx(id, null, true);
+      }
+    }, 350);
   }
 
   // ---------- 録音の保存（IndexedDB・端末内のみ） ----------
@@ -524,6 +553,7 @@
       mediaRec.onstop = function () {
         recBlob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/mp4' });
         stream.getTracks().forEach(function (t) { t.stop(); });
+        resetAc(); // 録音でiPhoneの音の処理系が切り替わるため、効果音の回路を作り直す
         clearInterval(recTick); clearTimeout(recTimer);
         var st = $('recStatus');
         st.classList.remove('live');
