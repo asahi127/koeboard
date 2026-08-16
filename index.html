@@ -84,6 +84,13 @@
     border-radius: 8px; cursor: pointer;
   }
   .talk-btns button:active { opacity: 0.75; }
+  .send-row { margin-top: 10px; }
+  .send-row button {
+    width: 100%; padding: 13px 0; font-size: 15px; font-family: var(--sans);
+    background: var(--surface); color: var(--accent-deep); border: 1px solid var(--line);
+    border-radius: 8px; cursor: pointer;
+  }
+  .send-row button:active { border-color: var(--accent); }
   .save-line { margin-top: 8px; min-height: 24px; }
   .save-line button {
     background: none; border: none; font-size: 13px; color: var(--sub); font-family: var(--sans);
@@ -232,6 +239,7 @@
       <button class="speak-btn" id="btnSpeak">話す</button>
       <button class="show-btn" id="btnShow">大きく<br>見せる</button>
     </div>
+    <div class="send-row"><button id="btnSend">この文章をLINEなどに送る</button></div>
     <div class="save-line" id="saveLine"></div>
   </div>
 
@@ -315,8 +323,17 @@
 (function () {
   'use strict';
   var KEY = 'koeboard-v1';
-  var CATS = ['よく使う', '返事', 'お願い', '体調', '気持ち'];
+  var CATS = ['よく使う', '返事', 'お願い', '体調', '気持ち', 'サンプル'];
   var SPECIAL_CATS = ['効果音', '録音'];
+  // ドラマ「VIVANT」のドラム（スマホ読み上げで話すキャラ）の定番セリフ
+  var SAMPLES = [
+    '超キケン！超キケン！',
+    '超びっくり！超びっくり！',
+    '超かわいい！超かわいい！',
+    '私はドラムです　よろしくね',
+    '了解したよ',
+    'ダメよダメダメ'
+  ];
 
   var PRESETS = [
     ['よく使う', 'ありがとう'], ['よく使う', 'おはよう'], ['よく使う', 'おやすみなさい'],
@@ -350,6 +367,12 @@
   }
   delete S.recents; // 履歴は残さない方針（過去に保存された分も消す）
   if (typeof S.settings.volume !== 'number') S.settings.volume = 1.0;
+  if (!S.samplesV1) {
+    SAMPLES.forEach(function (t, i) {
+      S.phrases.push({ id: 'smp' + i, cat: 'サンプル', text: t });
+    });
+    S.samplesV1 = true;
+  }
   function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
 
   // ---------- 読み上げ ----------
@@ -612,6 +635,19 @@
     var t = $('talkInput').value.trim();
     if (!t) { toast('見せたい言葉を入力してください'); return; }
     showBig(t);
+  });
+  $('btnSend').addEventListener('click', function () {
+    var t = $('talkInput').value.trim();
+    if (!t) { toast('送りたい文章を入力してください'); return; }
+    if (navigator.share) {
+      navigator.share({ text: t }).catch(function () {});
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () {
+        toast('文章をコピーしました。LINEなどに貼り付けてください');
+      }, function () { toast('コピーできませんでした'); });
+    } else {
+      toast('この端末では共有機能が使えません');
+    }
   });
   $('talkInput').addEventListener('input', renderSaveLine);
   function renderSaveLine() {
