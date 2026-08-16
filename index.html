@@ -123,6 +123,12 @@
   }
   .editing .grid button.phrase .del { display: block; }
   .editing .grid button.phrase { border-style: dashed; }
+  .grid button.phrase .snd {
+    position: absolute; right: 6px; bottom: 6px;
+    font-size: 11px; color: var(--sub); border: 1px solid var(--line);
+    border-radius: 10px; padding: 2px 9px; background: var(--bg); line-height: 1.5;
+  }
+  .editing .grid button.phrase .snd { display: none; }
   .grid button.add-tile {
     min-height: 72px; background: none; border: 1px dashed var(--line); border-radius: 8px;
     font-family: var(--sans); font-size: 16px; color: var(--sub); cursor: pointer;
@@ -294,6 +300,7 @@
       音が出ないときは、本体横のスイッチ（マナーモード）を解除して、音量を上げてください。
       このアプリはインターネットがない場所でも、いちど開いたあとなら読み上げできます。
       Safariの共有メニューから「ホーム画面に追加」すると、ふつうのアプリのように使えます。
+      ことばボタンの「送る」から送信される音声の声：VOICEVOX:春日部つむぎ
     </p>
   </div>
 </div>
@@ -550,6 +557,38 @@
     player.play();
   }
 
+  // ---------- 音声の共有（LINEなどに送る） ----------
+  function shareFiles(file, fallbackText) {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file] }).catch(function () {});
+    } else if (navigator.share && fallbackText) {
+      navigator.share({ text: fallbackText }).catch(function () {});
+    } else {
+      toast('この端末では音声の共有ができません');
+    }
+  }
+  function sharePhraseAudio(p) {
+    fetch('audio/' + p.id + '.m4a').then(function (r) {
+      if (!r.ok) throw new Error('no audio');
+      return r.blob();
+    }).then(function (b) {
+      shareFiles(new File([b], 'こえボード_' + p.text.slice(0, 10) + '.m4a', { type: 'audio/mp4' }), p.text);
+    }).catch(function () {
+      // 自分で追加したことばは音声ファイルがまだないため、文字で共有する
+      if (navigator.share) {
+        navigator.share({ text: p.text }).catch(function () {});
+        toast('このことばは音声がまだ無いので、文字で送ります');
+      } else {
+        toast('このことばは文字での共有になります');
+      }
+    });
+  }
+  function shareRec(r) {
+    var type = (r.blob && r.blob.type) || 'audio/mp4';
+    var ext = type.indexOf('webm') >= 0 ? '.webm' : '.m4a';
+    shareFiles(new File([r.blob], (r.name || '録音') + ext, { type: type }), null);
+  }
+
   // ---------- 録音 ----------
   var mediaRec = null, chunks = [], recBlob = null, recTimer = null, recTick = null, recStart = 0;
   function openRecSheet() {
@@ -695,7 +734,8 @@
         if (S.cat !== '録音') return;
         var html = list.map(function (r) {
           return '<button class="phrase" data-rec="' + r.id + '">' + esc(r.name) +
-            '<span class="del" aria-hidden="true">×</span></button>';
+            '<span class="del" aria-hidden="true">×</span>' +
+            '<span class="snd">送る</span></button>';
         }).join('');
         html += '<button class="add-tile" id="recTile">＋ 録音する</button>';
         if (list.length === 0) html = '<div class="grid-empty">マイクで声や音を録音して、ボタンにできます</div>' + html;
@@ -706,7 +746,8 @@
     var list = S.phrases.filter(function (p) { return p.cat === S.cat; });
     var html = list.map(function (p) {
       return '<button class="phrase" data-id="' + p.id + '">' + esc(p.text) +
-        '<span class="del" aria-hidden="true">×</span></button>';
+        '<span class="del" aria-hidden="true">×</span>' +
+        '<span class="snd">送る</span></button>';
     }).join('');
     html += '<button class="add-tile" id="addTile">＋ ことばを登録</button>';
     if (list.length === 0) html = '<div class="grid-empty">このグループにはまだ登録がありません</div>' + html;
@@ -715,6 +756,17 @@
   $('grid').addEventListener('click', function (e) {
     if (e.target.closest('#addTile')) { openAdd(''); return; }
     if (e.target.closest('#recTile')) { openRecSheet(); return; }
+    var sndEl = e.target.closest('.snd');
+    if (sndEl) {
+      var tile = sndEl.closest('button.phrase');
+      if (tile && tile.dataset.rec) {
+        recGet(tile.dataset.rec, function (r) { if (r) shareRec(r); });
+      } else if (tile) {
+        var sp = S.phrases.filter(function (x) { return x.id === tile.dataset.id; })[0];
+        if (sp) sharePhraseAudio(sp);
+      }
+      return;
+    }
     var b = e.target.closest('button.phrase'); if (!b) return;
     if (b.dataset.sfx) { playSfx(b.dataset.sfx, b); return; }
     if (b.dataset.rec) {
