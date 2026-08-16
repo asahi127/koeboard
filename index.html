@@ -62,7 +62,18 @@
     padding: 16px; line-height: 1.6; resize: none;
   }
   .talk-input:focus { outline: none; border-color: var(--accent); }
-  .talk-btns { display: flex; gap: 10px; margin-top: 10px; }
+  .talk-btns { display: flex; gap: 10px; margin-top: 10px; align-items: stretch; }
+  .dog-avatar {
+    width: 62px; height: 62px; align-self: center; flex-shrink: 0;
+    border-radius: 50%; border: 1px solid var(--line); overflow: hidden;
+  }
+  .dog-avatar img { width: 100%; height: 100%; display: block; }
+  .dog-avatar.talking { animation: dogtalk 0.4s ease-in-out infinite; }
+  @keyframes dogtalk {
+    0%, 100% { transform: scale(1) rotate(-3deg); }
+    50% { transform: scale(1.1) rotate(3deg); }
+  }
+  @media (prefers-reduced-motion: reduce) { .dog-avatar.talking { animation: none; } }
   .talk-btns .speak-btn {
     flex: 1; padding: 18px 0; font-size: 19px; font-weight: 600; font-family: var(--sans);
     background: var(--accent); color: #FFFFFF; border: none; border-radius: 8px; cursor: pointer;
@@ -157,6 +168,13 @@
   .ops-row .primary { background: var(--accent); border: none; color: #FFFFFF; font-weight: 600; }
   .ops-row .quiet { background: none; border: 1px solid var(--line); color: var(--sub); }
   .sheet .note { font-size: 13px; color: var(--sub); line-height: 1.9; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .rec-status { font-size: 14px; color: var(--sub); line-height: 1.9; margin-bottom: 16px; }
+  .rec-status.live { color: var(--accent-deep); font-weight: 600; }
+  .danger-row { margin-top: 20px; text-align: center; }
+  .danger-row button {
+    background: none; border: none; color: var(--sub); font-size: 14px; font-family: var(--sans);
+    cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+  }
 
   #toast {
     position: fixed; left: 50%; transform: translateX(-50%);
@@ -210,6 +228,7 @@
   <div class="talk-area">
     <textarea class="talk-input" id="talkInput" rows="2" placeholder="ここに入力して「話す」を押す" aria-label="話したい言葉を入力"></textarea>
     <div class="talk-btns">
+      <div class="dog-avatar" id="dogAvatar" aria-hidden="true"><img src="icon.png" alt=""></div>
       <button class="speak-btn" id="btnSpeak">話す</button>
       <button class="show-btn" id="btnShow">大きく<br>見せる</button>
     </div>
@@ -270,6 +289,25 @@
   </div>
 </div>
 
+<!-- 録音シート -->
+<div class="overlay" id="recOverlay">
+  <div class="sheet">
+    <h3>こえや音を録音</h3>
+    <p class="rec-status" id="recStatus">下のボタンを押すと録音が始まります（最長30秒）。はじめての時はマイクの使用を許可してください。</p>
+    <div class="ops-row">
+      <button class="primary" id="recToggle">録音を始める</button>
+    </div>
+    <div id="recResult" hidden>
+      <div class="ops-row" style="margin-top: 14px">
+        <button class="quiet" id="recPlay">聞いてみる</button>
+      </div>
+      <label class="field" style="margin-top: 18px"><span>名前（ボタンに表示されます）</span><input type="text" id="recName" autocomplete="off"></label>
+      <div class="ops-row"><button class="primary" id="recSave">この録音を保存する</button></div>
+    </div>
+    <div class="danger-row"><button id="recClose">閉じる</button></div>
+  </div>
+</div>
+
 <div id="toast" role="status"></div>
 
 <script>
@@ -277,6 +315,7 @@
   'use strict';
   var KEY = 'koeboard-v1';
   var CATS = ['よく使う', '返事', 'お願い', '体調', '気持ち'];
+  var SPECIAL_CATS = ['効果音', '録音'];
 
   var PRESETS = [
     ['よく使う', 'ありがとう'], ['よく使う', 'おはよう'], ['よく使う', 'おやすみなさい'],
@@ -344,11 +383,193 @@
     if (speakingBtn) speakingBtn.classList.remove('speaking');
     speakingBtn = btn || null;
     if (speakingBtn) speakingBtn.classList.add('speaking');
+    dogTalk(true);
     u.onend = u.onerror = function () {
+      dogTalk(false);
       if (speakingBtn) { speakingBtn.classList.remove('speaking'); speakingBtn = null; }
     };
     synth.speak(u);
   }
+  function dogTalk(on) { $('dogAvatar').classList.toggle('talking', !!on); }
+
+  // ---------- 効果音（プログラム合成・音声ファイル不要） ----------
+  var actx = null;
+  function ac() {
+    var A = window.AudioContext || window.webkitAudioContext;
+    if (!A) return null;
+    if (!actx) actx = new A();
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function envGain(a, t0, dur, vol) {
+    var g = a.createGain();
+    var v = Math.max(0.001, vol * S.settings.volume);
+    g.gain.setValueAtTime(0.001, t0);
+    g.gain.exponentialRampToValueAtTime(v, t0 + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    g.connect(a.destination);
+    return g;
+  }
+  function beep(a, freq, t0, dur, type, vol) {
+    var o = a.createOscillator();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    o.connect(envGain(a, t0, dur, vol || 0.5));
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  var _noise = null;
+  function noiseBuf(a) {
+    if (_noise) return _noise;
+    _noise = a.createBuffer(1, Math.floor(a.sampleRate * 0.5), a.sampleRate);
+    var d = _noise.getChannelData(0);
+    for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return _noise;
+  }
+  function hit(a, t0, dur, vol, freq) {
+    var s = a.createBufferSource();
+    s.buffer = noiseBuf(a); s.loop = true;
+    var f = a.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = freq || 1800; f.Q.value = 0.9;
+    s.connect(f); f.connect(envGain(a, t0, dur, vol));
+    s.start(t0); s.stop(t0 + dur + 0.05);
+  }
+  var SFX = [
+    { id: 'pinpon', name: 'ピンポーン（正解）', len: 1000, run: function (a, t) { beep(a, 1047, t, 0.35, 'sine', 0.5); beep(a, 1568, t + 0.18, 0.6, 'sine', 0.5); } },
+    { id: 'bubu', name: 'ブッブー（残念）', len: 800, run: function (a, t) { beep(a, 147, t, 0.25, 'square', 0.3); beep(a, 147, t + 0.32, 0.4, 'square', 0.3); } },
+    { id: 'drum', name: 'ドラムロール', len: 2400, run: function (a, t) { for (var i = 0; i < 40; i++) hit(a, t + i * 0.045, 0.05, 0.4, 900 + (i % 2) * 300); hit(a, t + 1.85, 0.5, 0.6, 3500); } },
+    { id: 'clap', name: 'はくしゅ', len: 1700, run: function (a, t) { for (var i = 0; i < 14; i++) hit(a, t + i * 0.11 + (i % 3) * 0.015, 0.09, 0.5, 1600 + (i % 4) * 250); } },
+    { id: 'chin', name: 'チーン', len: 1600, run: function (a, t) { beep(a, 2093, t, 1.4, 'sine', 0.4); beep(a, 4186, t, 0.7, 'sine', 0.12); } },
+    { id: 'fanfare', name: 'ファンファーレ', len: 1900, run: function (a, t) { [523, 659, 784, 1047].forEach(function (f, i) { beep(a, f, t + i * 0.18, i === 3 ? 0.8 : 0.2, 'triangle', 0.45); }); beep(a, 1319, t + 0.9, 0.7, 'triangle', 0.35); } }
+  ];
+  function playSfx(id, btn) {
+    var a = ac();
+    if (!a) { toast('この端末では効果音が使えません'); return; }
+    var s = SFX.filter(function (x) { return x.id === id; })[0];
+    if (!s) return;
+    s.run(a, a.currentTime + 0.03);
+    dogTalk(true);
+    if (btn) btn.classList.add('speaking');
+    setTimeout(function () { dogTalk(false); if (btn) btn.classList.remove('speaking'); }, s.len);
+  }
+
+  // ---------- 録音の保存（IndexedDB・端末内のみ） ----------
+  var db = null;
+  function idb(cb) {
+    if (db) { cb(db); return; }
+    var r = indexedDB.open('koeboard', 1);
+    r.onupgradeneeded = function (e) { e.target.result.createObjectStore('recs', { keyPath: 'id' }); };
+    r.onsuccess = function (e) { db = e.target.result; cb(db); };
+    r.onerror = function () { toast('この端末では録音の保存が使えません'); };
+  }
+  function recAll(cb) {
+    idb(function (d) {
+      var out = [];
+      d.transaction('recs').objectStore('recs').openCursor().onsuccess = function (e) {
+        var c = e.target.result;
+        if (c) { out.push(c.value); c.continue(); } else { cb(out); }
+      };
+    });
+  }
+  function recGet(id, cb) {
+    idb(function (d) {
+      d.transaction('recs').objectStore('recs').get(id).onsuccess = function (e) { cb(e.target.result); };
+    });
+  }
+  function recDel(id, cb) {
+    idb(function (d) {
+      var t = d.transaction('recs', 'readwrite');
+      t.objectStore('recs').delete(id);
+      t.oncomplete = cb || function () {};
+    });
+  }
+  var player = null;
+  function playBlob(blob, btn) {
+    if (player) { player.pause(); }
+    var url = URL.createObjectURL(blob);
+    player = new Audio(url);
+    player.volume = S.settings.volume;
+    dogTalk(true);
+    if (btn) btn.classList.add('speaking');
+    player.onended = player.onerror = function () {
+      dogTalk(false);
+      if (btn) btn.classList.remove('speaking');
+      URL.revokeObjectURL(url);
+    };
+    player.play();
+  }
+
+  // ---------- 録音 ----------
+  var mediaRec = null, chunks = [], recBlob = null, recTimer = null, recTick = null, recStart = 0;
+  function openRecSheet() {
+    recBlob = null;
+    $('recResult').hidden = true;
+    $('recName').value = '';
+    $('recToggle').textContent = '録音を始める';
+    var st = $('recStatus');
+    st.classList.remove('live');
+    st.textContent = '下のボタンを押すと録音が始まります（最長30秒）。はじめての時はマイクの使用を許可してください。';
+    $('recOverlay').classList.add('show');
+  }
+  function startRec() {
+    if (!navigator.mediaDevices || !window.MediaRecorder) { toast('この端末では録音が使えません'); return; }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var mime = '';
+      ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].some(function (m) {
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) { mime = m; return true; }
+        return false;
+      });
+      mediaRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      chunks = [];
+      mediaRec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      mediaRec.onstop = function () {
+        recBlob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/mp4' });
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        clearInterval(recTick); clearTimeout(recTimer);
+        var st = $('recStatus');
+        st.classList.remove('live');
+        st.textContent = '録音できました。聞いて確認して、名前を付けて保存してください。';
+        $('recToggle').textContent = '録音しなおす';
+        $('recResult').hidden = false;
+      };
+      mediaRec.start();
+      recStart = Date.now();
+      $('recResult').hidden = true;
+      $('recToggle').textContent = '録音を止める';
+      var st = $('recStatus');
+      st.classList.add('live');
+      st.textContent = '録音中… 0秒';
+      recTick = setInterval(function () {
+        st.textContent = '録音中… ' + Math.round((Date.now() - recStart) / 1000) + '秒';
+      }, 250);
+      recTimer = setTimeout(stopRec, 30000);
+    }).catch(function () {
+      toast('マイクの使用を許可してください（設定 > Safari > マイク）');
+    });
+  }
+  function stopRec() { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); }
+  $('recToggle').addEventListener('click', function () {
+    if (mediaRec && mediaRec.state === 'recording') { stopRec(); } else { startRec(); }
+  });
+  $('recPlay').addEventListener('click', function () { if (recBlob) playBlob(recBlob, this); });
+  $('recSave').addEventListener('click', function () {
+    if (!recBlob) return;
+    var name = $('recName').value.trim();
+    if (!name) { toast('録音の名前を入力してください'); return; }
+    var rec = { id: 'r' + Date.now(), name: name, blob: recBlob, created: Date.now() };
+    idb(function (d) {
+      var t = d.transaction('recs', 'readwrite');
+      t.objectStore('recs').put(rec);
+      t.oncomplete = function () {
+        $('recOverlay').classList.remove('show');
+        toast('「' + name + '」を保存しました');
+        renderGrid();
+      };
+    });
+  });
+  $('recClose').addEventListener('click', function () {
+    stopRec();
+    $('recOverlay').classList.remove('show');
+  });
 
   // ---------- 入力して話す ----------
   $('btnSpeak').addEventListener('click', function () {
@@ -385,7 +606,7 @@
   // ---------- カテゴリとフレーズ ----------
   var editing = false;
   function renderCats() {
-    $('catRow').innerHTML = CATS.map(function (c) {
+    $('catRow').innerHTML = CATS.concat(SPECIAL_CATS).map(function (c) {
       return '<button data-cat="' + esc(c) + '"' + (c === S.cat ? ' class="on"' : '') + '>' + esc(c) + '</button>';
     }).join('');
   }
@@ -395,6 +616,27 @@
     renderCats(); renderGrid();
   });
   function renderGrid() {
+    var g = $('grid');
+    if (S.cat === '効果音') {
+      g.innerHTML = SFX.map(function (s) {
+        return '<button class="phrase" data-sfx="' + s.id + '">' + esc(s.name) + '</button>';
+      }).join('');
+      return;
+    }
+    if (S.cat === '録音') {
+      g.innerHTML = '<div class="grid-empty">読み込み中…</div>';
+      recAll(function (list) {
+        if (S.cat !== '録音') return;
+        var html = list.map(function (r) {
+          return '<button class="phrase" data-rec="' + r.id + '">' + esc(r.name) +
+            '<span class="del" aria-hidden="true">×</span></button>';
+        }).join('');
+        html += '<button class="add-tile" id="recTile">＋ 録音する</button>';
+        if (list.length === 0) html = '<div class="grid-empty">マイクで声や音を録音して、ボタンにできます</div>' + html;
+        g.innerHTML = html;
+      });
+      return;
+    }
     var list = S.phrases.filter(function (p) { return p.cat === S.cat; });
     var html = list.map(function (p) {
       return '<button class="phrase" data-id="' + p.id + '">' + esc(p.text) +
@@ -402,11 +644,22 @@
     }).join('');
     html += '<button class="add-tile" id="addTile">＋ ことばを登録</button>';
     if (list.length === 0) html = '<div class="grid-empty">このグループにはまだ登録がありません</div>' + html;
-    $('grid').innerHTML = html;
+    g.innerHTML = html;
   }
   $('grid').addEventListener('click', function (e) {
     if (e.target.closest('#addTile')) { openAdd(''); return; }
+    if (e.target.closest('#recTile')) { openRecSheet(); return; }
     var b = e.target.closest('button.phrase'); if (!b) return;
+    if (b.dataset.sfx) { playSfx(b.dataset.sfx, b); return; }
+    if (b.dataset.rec) {
+      var rid = b.dataset.rec;
+      if (editing) {
+        if (confirm('この録音を削除しますか？')) recDel(rid, renderGrid);
+      } else {
+        recGet(rid, function (r) { if (r) playBlob(r.blob, b); });
+      }
+      return;
+    }
     var p = S.phrases.filter(function (x) { return x.id === b.dataset.id; })[0];
     if (!p) return;
     if (editing) {
