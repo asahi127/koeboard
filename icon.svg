@@ -1,4 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180">
-  <rect width="180" height="180" fill="#CC785C"/>
-  <text x="90" y="90" font-family="Hiragino Kaku Gothic ProN, sans-serif" font-size="60" font-weight="600" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">こえ</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">元気におしゃべりする白いジャックラッセルテリア</title>
+  <desc id="desc">薄茶色のぶち模様がある白い犬が、口を大きく開けて話している可愛い漫画調のアイコン</desc>
+
+  <rect width="512" height="512" rx="72" fill="#9DDCD4"/>
+
+  <!-- voice marks -->
+  <g fill="#E97835" stroke="#493B35" stroke-width="7" stroke-linejoin="round">
+    <path d="M447 191v45c-8-4-20-1-23 8-3 8 4 16 14 16 12 0 20-8 20-20v-25l22-5v16c-8-3-18 1-20 9-2 8 5 15 14 15 11 0 18-8 18-20v-50z"/>
+  </g>
+
+  <!-- ears behind head -->
+  <path d="M181 101c-35-18-86-7-113 25-18 21-11 60 14 85 24 24 54 28 76 7l28-70z" fill="#C99362" stroke="#493B35" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M331 101c35-18 86-7 113 25 18 21 11 60-14 85-24 24-54 28-76 7l-28-70z" fill="#C99362" stroke="#493B35" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M174 113c-28-10-64-1-84 20-12 13-8 36 8 51 18 17 39 17 55 1z" fill="#E9C49C"/>
+  <path d="M338 113c28-10 64-1 84 20 12 13 8 36-8 51-18 17-39 17-55 1z" fill="#E9C49C"/>
+
+  <!-- fluffy head silhouette -->
+  <path d="M119 180c-8-50 29-91 74-88 22-31 79-39 112-10 47-9 91 27 88 76 39 25 52 78 27 115 20 45-4 91-43 108-6 54-49 88-98 78-35 26-88 15-106-21-50 1-85-38-78-82-40-27-45-83-15-116-7-32 9-64 39-80z" fill="#FFFDF5" stroke="#493B35" stroke-width="15" stroke-linejoin="round"/>
+
+  <!-- forward-folded ear tips -->
+  <path d="M181 101c-20 8-39 25-49 46 17-8 37-5 53 7l11-43z" fill="#B67E51" stroke="#493B35" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M331 101c20 8 39 25 49 46-17-8-37-5-53 7l-11-43z" fill="#B67E51" stroke="#493B35" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- tan face patch -->
+  <path d="M278 109c36-21 82-9 102 24 13 22 10 51-2 75-15 30-41 55-77 57-30 2-49-19-47-51 2-39-10-82 24-105z" fill="#D9AD7A"/>
+  <path d="M294 116c25-13 59-2 73 22 11 19 6 42-2 58-12 23-34 39-58 40-19 1-28-14-27-35 1-29-10-69 14-85z" fill="#EDC99E"/>
+
+  <!-- tufts -->
+  <g fill="#FFFDF5" stroke="#493B35" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M181 116 198 75l16 35 29-43 9 43"/>
+  </g>
+
+  <!-- eyes -->
+  <g stroke="#493B35" stroke-width="11">
+    <ellipse cx="189" cy="224" rx="35" ry="40" fill="#302A29"/>
+    <ellipse cx="326" cy="218" rx="36" ry="41" fill="#302A29"/>
+  </g>
+  <ellipse cx="196" cy="214" rx="12" ry="15" fill="#FFFFFF"/>
+  <ellipse cx="334" cy="207" rx="12" ry="15" fill="#FFFFFF"/>
+  <circle cx="178" cy="238" r="6" fill="#A76F42"/>
+  <circle cx="315" cy="233" r="6" fill="#A76F42"/>
+
+  <!-- muzzle -->
+  <ellipse cx="254" cy="292" rx="104" ry="70" fill="#FFFDF5"/>
+  <path d="M211 282c9-27 75-31 88 0 7 18-11 39-42 40-31 1-53-21-46-40z" fill="#3A3230" stroke="#493B35" stroke-width="11"/>
+  <ellipse cx="238" cy="282" rx="13" ry="8" fill="#766B65"/>
+
+  <!-- happy open mouth -->
+  <path d="M169 324c37 25 132 24 172-3 5 68-25 117-84 119-60 2-91-48-88-116z" fill="#493B35" stroke="#493B35" stroke-width="13" stroke-linejoin="round"/>
+  <path d="M187 331c39 15 99 14 136-2-3 19-17 31-34 34-27 5-72 4-92-7-7-5-9-14-10-25z" fill="#FFFDF5"/>
+  <path d="M203 409c18-31 79-38 108-6-13 22-31 35-55 36-22 0-40-10-53-30z" fill="#F27D89"/>
+  <path d="M225 417c18-8 39-9 58-2" fill="none" stroke="#D95C6C" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- voice marks (top layer, radiating from the mouth) -->
+  <g fill="none" stroke="#E97835" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M436 330 472 316"/>
+    <path d="M444 356 484 354"/>
+    <path d="M434 382 468 398"/>
+    <path d="M76 330 40 316"/>
+    <path d="M68 356 28 354"/>
+    <path d="M78 382 44 398"/>
+  </g>
 </svg>
