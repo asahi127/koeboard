@@ -168,6 +168,18 @@
   .ops-row .primary { background: var(--accent); border: none; color: #FFFFFF; font-weight: 600; }
   .ops-row .quiet { background: none; border: 1px solid var(--line); color: var(--sub); }
   .sheet .note { font-size: 13px; color: var(--sub); line-height: 1.9; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .sheet .help { font-size: 13px; color: var(--sub); line-height: 1.9; margin-bottom: 14px; }
+  .sheet .help b { color: var(--accent-deep); }
+  .dict-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 2px; border-bottom: 1px solid var(--line); font-size: 15px;
+  }
+  .dict-row .pair { overflow-wrap: anywhere; }
+  .dict-row .ops { display: flex; gap: 14px; flex-shrink: 0; margin-left: 10px; }
+  .dict-row .ops button {
+    background: none; border: none; font-size: 13px; color: var(--sub); cursor: pointer;
+    font-family: var(--sans); text-decoration: underline; text-underline-offset: 3px;
+  }
   .rec-status { font-size: 14px; color: var(--sub); line-height: 1.9; margin-bottom: 16px; }
   .rec-status.live { color: var(--accent-deep); font-weight: 600; }
   .danger-row { margin-top: 20px; text-align: center; }
@@ -279,6 +291,9 @@
       <button class="quiet" id="setClose">閉じる</button>
       <button class="primary" id="setTest">この声でためす</button>
     </div>
+    <div class="ops-row" style="margin-top: 10px">
+      <button class="quiet" id="btnDict" style="flex: 1">ことばの読み方を直す（じてん）</button>
+    </div>
     <p class="note">
       効果音と録音の再生は、マナーモード中でも鳴るようにしてあります（読み上げの声はマナーモード中は鳴らないことがあります）。
       実際に聞こえる大きさは「ここの音量 × iPhone本体の音量」で決まります。
@@ -287,6 +302,21 @@
       このアプリはインターネットがない場所でも、いちど開いたあとなら読み上げできます。
       Safariの共有メニューから「ホーム画面に追加」すると、ふつうのアプリのように使えます。
     </p>
+  </div>
+</div>
+
+<!-- 読み方じてんシート -->
+<div class="overlay" id="dictOverlay">
+  <div class="sheet">
+    <h3>ことばの読み方（じてん）</h3>
+    <p class="help">読み間違えることばを登録すると、<b>読み上げのときだけ</b>正しい読みに置き換わります（画面の文字はそのまま）。読み方はカタカナで入れるのがおすすめです。</p>
+    <div id="dictList"></div>
+    <label class="field" style="margin-top: 16px"><span>ことば（例：長男）</span><input type="text" id="dictWord" autocomplete="off"></label>
+    <label class="field"><span>読み方（例：チョーナン）</span><input type="text" id="dictYomi" autocomplete="off"></label>
+    <div class="ops-row">
+      <button class="quiet" id="dictClose">閉じる</button>
+      <button class="primary" id="dictAdd">登録する</button>
+    </div>
   </div>
 </div>
 
@@ -376,6 +406,7 @@
   delete S.recents; // 履歴は残さない方針（過去に保存された分も消す）
   if (typeof S.settings.volume !== 'number') S.settings.volume = 1.0;
   if (!S.cats || !S.cats.length) S.cats = CATS.slice(); // グループは自由に名前変更・並び替えできる
+  if (!S.dict) S.dict = [{ w: '長男', y: 'チョーナン' }]; // 読み方じてん（読み上げ時のみ置換）
   if (!S.samplesV1) {
     SAMPLES.forEach(function (t, i) {
       S.phrases.push({ id: 'smp' + i, cat: 'サンプル', text: t });
@@ -402,11 +433,22 @@
     var v = jaVoices.filter(function (x) { return x.voiceURI === wanted; })[0];
     return v || jaVoices[0];
   }
+  // 読み上げ用にテキストを整える（画面の表示は変えない）
+  function toSpeech(text) {
+    var t = text;
+    // 読み方じてん: 長いことばから順に置き換え
+    S.dict.slice().sort(function (a, b) { return b.w.length - a.w.length; }).forEach(function (d) {
+      if (d.w) t = t.split(d.w).join(d.y);
+    });
+    // 文や区切りの先頭の「は」は助詞ではないのに「わ」と読まれることがあるためカタカナにする
+    t = t.replace(/(^|[\s、。．！？!?\n])は/g, '$1ハ');
+    return t;
+  }
   var speakingBtn = null;
   function speak(text, btn) {
     if (!synth) { toast('この端末では読み上げ機能が使えません'); return; }
     synth.cancel();
-    var u = new SpeechSynthesisUtterance(text);
+    var u = new SpeechSynthesisUtterance(toSpeech(text));
     u.lang = 'ja-JP';
     u.rate = S.settings.rate;
     u.pitch = S.settings.pitch;
@@ -872,6 +914,41 @@
   });
   $('voiceSelect').addEventListener('change', function () { S.settings.voiceURI = this.value; save(); });
   $('setTest').addEventListener('click', function () { speak('こんにちは。この声で話します。', this); });
+
+  // ---------- 読み方じてん ----------
+  function renderDict() {
+    $('dictList').innerHTML = S.dict.length
+      ? S.dict.map(function (d, i) {
+          return '<div class="dict-row"><span class="pair">' + esc(d.w) + ' → ' + esc(d.y) + '</span>' +
+            '<span class="ops"><button data-op="try" data-i="' + i + '">聞く</button>' +
+            '<button data-op="del" data-i="' + i + '">削除</button></span></div>';
+        }).join('')
+      : '<p class="help">まだ登録がありません</p>';
+  }
+  $('btnDict').addEventListener('click', function () {
+    renderDict();
+    $('dictWord').value = ''; $('dictYomi').value = '';
+    $('setOverlay').classList.remove('show');
+    $('dictOverlay').classList.add('show');
+  });
+  $('dictClose').addEventListener('click', function () { $('dictOverlay').classList.remove('show'); });
+  $('dictOverlay').addEventListener('click', function (e) { if (e.target === this) this.classList.remove('show'); });
+  $('dictAdd').addEventListener('click', function () {
+    var w = $('dictWord').value.trim(), y = $('dictYomi').value.trim();
+    if (!w || !y) { toast('「ことば」と「読み方」の両方を入力してください'); return; }
+    var hit = S.dict.filter(function (d) { return d.w === w; })[0];
+    if (hit) { hit.y = y; } else { S.dict.push({ w: w, y: y }); }
+    save(); renderDict();
+    $('dictWord').value = ''; $('dictYomi').value = '';
+    toast('登録しました。「聞く」で確認できます');
+  });
+  $('dictList').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var i = parseInt(b.dataset.i, 10);
+    var d = S.dict[i]; if (!d) return;
+    if (b.dataset.op === 'try') { speak(d.w, b); }
+    else { S.dict.splice(i, 1); save(); renderDict(); toast('削除しました'); }
+  });
 
   // ---------- トースト ----------
   var toastTimer = null;
