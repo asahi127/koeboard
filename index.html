@@ -84,13 +84,6 @@
     border-radius: 8px; cursor: pointer;
   }
   .talk-btns button:active { opacity: 0.75; }
-  .send-row { margin-top: 10px; }
-  .send-row button {
-    width: 100%; padding: 13px 0; font-size: 15px; font-family: var(--sans);
-    background: var(--surface); color: var(--accent-deep); border: 1px solid var(--line);
-    border-radius: 8px; cursor: pointer;
-  }
-  .send-row button:active { border-color: var(--accent); }
   .save-line { margin-top: 8px; min-height: 24px; }
   .save-line button {
     background: none; border: none; font-size: 13px; color: var(--sub); font-family: var(--sans);
@@ -123,12 +116,6 @@
   }
   .editing .grid button.phrase .del { display: block; }
   .editing .grid button.phrase { border-style: dashed; }
-  .grid button.phrase .snd {
-    position: absolute; right: 6px; bottom: 6px;
-    font-size: 11px; color: var(--sub); border: 1px solid var(--line);
-    border-radius: 10px; padding: 2px 9px; background: var(--bg); line-height: 1.5;
-  }
-  .editing .grid button.phrase .snd { display: none; }
   .grid button.add-tile {
     min-height: 72px; background: none; border: 1px dashed var(--line); border-radius: 8px;
     font-family: var(--sans); font-size: 16px; color: var(--sub); cursor: pointer;
@@ -245,7 +232,6 @@
       <button class="speak-btn" id="btnSpeak">話す</button>
       <button class="show-btn" id="btnShow">大きく<br>見せる</button>
     </div>
-    <div class="send-row"><button id="btnSend">この文章をLINEなどに送る</button></div>
     <div class="save-line" id="saveLine"></div>
   </div>
 
@@ -300,8 +286,23 @@
       音が出ないときは、本体横のスイッチ（マナーモード）を解除して、音量を上げてください。
       このアプリはインターネットがない場所でも、いちど開いたあとなら読み上げできます。
       Safariの共有メニューから「ホーム画面に追加」すると、ふつうのアプリのように使えます。
-      ことばボタンの「送る」から送信される音声の声：VOICEVOX:春日部つむぎ
     </p>
+  </div>
+</div>
+
+<!-- グループ編集シート -->
+<div class="overlay" id="catOverlay">
+  <div class="sheet">
+    <h3>グループを編集</h3>
+    <label class="field"><span>グループ名</span><input type="text" id="catName" autocomplete="off"></label>
+    <div class="ops-row">
+      <button class="quiet" id="catLeft">← 左へ動かす</button>
+      <button class="quiet" id="catRight">右へ動かす →</button>
+    </div>
+    <div class="ops-row" style="margin-top: 10px">
+      <button class="quiet" id="catCancel">閉じる</button>
+      <button class="primary" id="catSave">名前を保存する</button>
+    </div>
   </div>
 </div>
 
@@ -374,6 +375,7 @@
   }
   delete S.recents; // 履歴は残さない方針（過去に保存された分も消す）
   if (typeof S.settings.volume !== 'number') S.settings.volume = 1.0;
+  if (!S.cats || !S.cats.length) S.cats = CATS.slice(); // グループは自由に名前変更・並び替えできる
   if (!S.samplesV1) {
     SAMPLES.forEach(function (t, i) {
       S.phrases.push({ id: 'smp' + i, cat: 'サンプル', text: t });
@@ -484,19 +486,34 @@
     s.connect(f); f.connect(envGain(a, t0, dur, vol));
     s.start(t0); s.stop(t0 + dur + 0.05);
   }
+  // 効果音の音源: 効果音ラボ（soundeffect-lab.info）。クレジット不要・アプリ組み込み可の規約を確認済み
   var SFX = [
-    { id: 'pinpon', name: 'ピンポーン（正解）', len: 1000, run: function (a, t) { beep(a, 1047, t, 0.35, 'sine', 0.5); beep(a, 1568, t + 0.18, 0.6, 'sine', 0.5); } },
-    { id: 'bubu', name: 'ブッブー（残念）', len: 800, run: function (a, t) { beep(a, 147, t, 0.25, 'square', 0.3); beep(a, 147, t + 0.32, 0.4, 'square', 0.3); } },
-    { id: 'drum', name: 'ドラムロール', len: 2400, run: function (a, t) { for (var i = 0; i < 40; i++) hit(a, t + i * 0.045, 0.05, 0.4, 900 + (i % 2) * 300); hit(a, t + 1.85, 0.5, 0.6, 3500); } },
-    { id: 'clap', name: 'はくしゅ', len: 1700, run: function (a, t) { for (var i = 0; i < 14; i++) hit(a, t + i * 0.11 + (i % 3) * 0.015, 0.09, 0.5, 1600 + (i % 4) * 250); } },
-    { id: 'chin', name: 'チーン', len: 1600, run: function (a, t) { beep(a, 2093, t, 1.4, 'sine', 0.4); beep(a, 4186, t, 0.7, 'sine', 0.12); } },
-    { id: 'fanfare', name: 'ファンファーレ', len: 1900, run: function (a, t) { [523, 659, 784, 1047].forEach(function (f, i) { beep(a, f, t + i * 0.18, i === 3 ? 0.8 : 0.2, 'triangle', 0.45); }); beep(a, 1319, t + 0.9, 0.7, 'triangle', 0.35); } }
+    { id: 'pinpon', name: 'ピンポーン（正解）', file: 'sfx/pinpon.mp3', len: 1800, run: function (a, t) { beep(a, 1047, t, 0.35, 'sine', 0.5); beep(a, 1568, t + 0.18, 0.6, 'sine', 0.5); } },
+    { id: 'bubu', name: 'ブッブー（残念）', file: 'sfx/bubu.mp3', len: 800, run: function (a, t) { beep(a, 147, t, 0.25, 'square', 0.3); beep(a, 147, t + 0.32, 0.4, 'square', 0.3); } },
+    { id: 'drum', name: 'ドラムロール', file: 'sfx/drum.mp3', len: 4600, run: function (a, t) { for (var i = 0; i < 40; i++) hit(a, t + i * 0.045, 0.05, 0.4, 900 + (i % 2) * 300); hit(a, t + 1.85, 0.5, 0.6, 3500); } },
+    { id: 'clap', name: 'はくしゅ', file: 'sfx/clap.mp3', len: 3000, run: function (a, t) { for (var i = 0; i < 14; i++) hit(a, t + i * 0.11 + (i % 3) * 0.015, 0.09, 0.5, 1600 + (i % 4) * 250); } },
+    { id: 'chin', name: 'チーン', file: 'sfx/chin.mp3', len: 3600, run: function (a, t) { beep(a, 2093, t, 1.4, 'sine', 0.4); beep(a, 4186, t, 0.7, 'sine', 0.12); } },
+    { id: 'fanfare', name: 'ファンファーレ', file: 'sfx/fanfare.mp3', len: 2000, run: function (a, t) { [523, 659, 784, 1047].forEach(function (f, i) { beep(a, f, t + i * 0.18, i === 3 ? 0.8 : 0.2, 'triangle', 0.45); }); beep(a, 1319, t + 0.9, 0.7, 'triangle', 0.35); } }
   ];
-  function playSfx(id, btn, retried) {
-    var a = ac();
-    if (!a) { toast('この端末では効果音が使えません'); return; }
+  function playSfx(id, btn) {
     var s = SFX.filter(function (x) { return x.id === id; })[0];
     if (!s) return;
+    // 本物の効果音ファイルを再生（動画と同じ経路なのでマナーモードでも鳴る）
+    var el = new Audio(s.file);
+    el.volume = S.settings.volume;
+    var started = false;
+    function begin() { started = true; dogTalk(true); if (btn) btn.classList.add('speaking'); }
+    function done() { dogTalk(false); if (btn) btn.classList.remove('speaking'); }
+    el.onplaying = begin;
+    el.onended = done;
+    el.onerror = function () { if (!started) playSfxSynth(s, btn); else done(); };
+    var pr = el.play();
+    if (pr && pr.catch) pr.catch(function () { if (!started) playSfxSynth(s, btn); });
+  }
+  // ファイルが読み込めない場合の予備: プログラム合成音
+  function playSfxSynth(s, btn, retried) {
+    var a = ac();
+    if (!a) { toast('この端末では効果音が使えません'); return; }
     var mark = a.currentTime;
     s.run(a, a.currentTime + 0.05);
     dogTalk(true);
@@ -506,7 +523,7 @@
     setTimeout(function () {
       if (!retried && actx === a && a.currentTime <= mark + 0.001) {
         resetAc();
-        playSfx(id, null, true);
+        playSfxSynth(s, null, true);
       }
     }, 350);
   }
@@ -555,38 +572,6 @@
       URL.revokeObjectURL(url);
     };
     player.play();
-  }
-
-  // ---------- 音声の共有（LINEなどに送る） ----------
-  function shareFiles(file, fallbackText) {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file] }).catch(function () {});
-    } else if (navigator.share && fallbackText) {
-      navigator.share({ text: fallbackText }).catch(function () {});
-    } else {
-      toast('この端末では音声の共有ができません');
-    }
-  }
-  function sharePhraseAudio(p) {
-    fetch('audio/' + p.id + '.m4a').then(function (r) {
-      if (!r.ok) throw new Error('no audio');
-      return r.blob();
-    }).then(function (b) {
-      shareFiles(new File([b], 'こえボード_' + p.text.slice(0, 10) + '.m4a', { type: 'audio/mp4' }), p.text);
-    }).catch(function () {
-      // 自分で追加したことばは音声ファイルがまだないため、文字で共有する
-      if (navigator.share) {
-        navigator.share({ text: p.text }).catch(function () {});
-        toast('このことばは音声がまだ無いので、文字で送ります');
-      } else {
-        toast('このことばは文字での共有になります');
-      }
-    });
-  }
-  function shareRec(r) {
-    var type = (r.blob && r.blob.type) || 'audio/mp4';
-    var ext = type.indexOf('webm') >= 0 ? '.webm' : '.m4a';
-    shareFiles(new File([r.blob], (r.name || '録音') + ext, { type: type }), null);
   }
 
   // ---------- 録音 ----------
@@ -675,19 +660,6 @@
     if (!t) { toast('見せたい言葉を入力してください'); return; }
     showBig(t);
   });
-  $('btnSend').addEventListener('click', function () {
-    var t = $('talkInput').value.trim();
-    if (!t) { toast('送りたい文章を入力してください'); return; }
-    if (navigator.share) {
-      navigator.share({ text: t }).catch(function () {});
-    } else if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(t).then(function () {
-        toast('文章をコピーしました。LINEなどに貼り付けてください');
-      }, function () { toast('コピーできませんでした'); });
-    } else {
-      toast('この端末では共有機能が使えません');
-    }
-  });
   $('talkInput').addEventListener('input', renderSaveLine);
   function renderSaveLine() {
     var t = $('talkInput').value.trim();
@@ -711,15 +683,57 @@
   // ---------- カテゴリとフレーズ ----------
   var editing = false;
   function renderCats() {
-    $('catRow').innerHTML = CATS.concat(SPECIAL_CATS).map(function (c) {
+    $('catRow').innerHTML = S.cats.concat(SPECIAL_CATS).map(function (c) {
       return '<button data-cat="' + esc(c) + '"' + (c === S.cat ? ' class="on"' : '') + '>' + esc(c) + '</button>';
     }).join('');
   }
   $('catRow').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (editing) {
+      if (S.cats.indexOf(b.dataset.cat) >= 0) { openCatEdit(b.dataset.cat); }
+      else { toast('「効果音」「録音」のタブは変更できません'); }
+      return;
+    }
     S.cat = b.dataset.cat; save();
     renderCats(); renderGrid();
   });
+
+  // ---------- グループの名前変更・並び替え ----------
+  var editingCat = null;
+  function openCatEdit(name) {
+    editingCat = name;
+    $('catName').value = name;
+    $('catOverlay').classList.add('show');
+  }
+  function moveCat(dir) {
+    var i = S.cats.indexOf(editingCat), j = i + dir;
+    if (i < 0 || j < 0 || j >= S.cats.length) {
+      toast(dir < 0 ? 'いちばん左です' : 'いちばん右です');
+      return;
+    }
+    var t = S.cats[i]; S.cats[i] = S.cats[j]; S.cats[j] = t;
+    save(); renderCats();
+    toast('「' + editingCat + '」を動かしました');
+  }
+  $('catLeft').addEventListener('click', function () { moveCat(-1); });
+  $('catRight').addEventListener('click', function () { moveCat(1); });
+  $('catSave').addEventListener('click', function () {
+    var name = $('catName').value.trim();
+    if (!name) { toast('グループ名を入力してください'); return; }
+    if (name !== editingCat && (S.cats.indexOf(name) >= 0 || SPECIAL_CATS.indexOf(name) >= 0)) {
+      toast('同じ名前のグループがすでにあります'); return;
+    }
+    var i = S.cats.indexOf(editingCat);
+    if (i >= 0) S.cats[i] = name;
+    S.phrases.forEach(function (p) { if (p.cat === editingCat) p.cat = name; });
+    if (S.cat === editingCat) S.cat = name;
+    editingCat = name;
+    save(); renderCats(); renderGrid();
+    $('catOverlay').classList.remove('show');
+    toast('保存しました');
+  });
+  $('catCancel').addEventListener('click', function () { $('catOverlay').classList.remove('show'); });
+  $('catOverlay').addEventListener('click', function (e) { if (e.target === this) this.classList.remove('show'); });
   function renderGrid() {
     var g = $('grid');
     if (S.cat === '効果音') {
@@ -734,8 +748,7 @@
         if (S.cat !== '録音') return;
         var html = list.map(function (r) {
           return '<button class="phrase" data-rec="' + r.id + '">' + esc(r.name) +
-            '<span class="del" aria-hidden="true">×</span>' +
-            '<span class="snd">送る</span></button>';
+            '<span class="del" aria-hidden="true">×</span></button>';
         }).join('');
         html += '<button class="add-tile" id="recTile">＋ 録音する</button>';
         if (list.length === 0) html = '<div class="grid-empty">マイクで声や音を録音して、ボタンにできます</div>' + html;
@@ -746,8 +759,7 @@
     var list = S.phrases.filter(function (p) { return p.cat === S.cat; });
     var html = list.map(function (p) {
       return '<button class="phrase" data-id="' + p.id + '">' + esc(p.text) +
-        '<span class="del" aria-hidden="true">×</span>' +
-        '<span class="snd">送る</span></button>';
+        '<span class="del" aria-hidden="true">×</span></button>';
     }).join('');
     html += '<button class="add-tile" id="addTile">＋ ことばを登録</button>';
     if (list.length === 0) html = '<div class="grid-empty">このグループにはまだ登録がありません</div>' + html;
@@ -756,17 +768,6 @@
   $('grid').addEventListener('click', function (e) {
     if (e.target.closest('#addTile')) { openAdd(''); return; }
     if (e.target.closest('#recTile')) { openRecSheet(); return; }
-    var sndEl = e.target.closest('.snd');
-    if (sndEl) {
-      var tile = sndEl.closest('button.phrase');
-      if (tile && tile.dataset.rec) {
-        recGet(tile.dataset.rec, function (r) { if (r) shareRec(r); });
-      } else if (tile) {
-        var sp = S.phrases.filter(function (x) { return x.id === tile.dataset.id; })[0];
-        if (sp) sharePhraseAudio(sp);
-      }
-      return;
-    }
     var b = e.target.closest('button.phrase'); if (!b) return;
     if (b.dataset.sfx) { playSfx(b.dataset.sfx, b); return; }
     if (b.dataset.rec) {
@@ -794,12 +795,13 @@
     this.classList.toggle('on', editing);
     this.textContent = editing ? '完了' : '編集';
     $('shell').classList.toggle('editing', editing);
+    if (editing) toast('ことばは × で削除、グループ名はタブを押すと変更・並び替えできます');
   });
 
   // ---------- 追加シート ----------
   function openAdd(text) {
     $('addText').value = text || '';
-    $('addCat').innerHTML = CATS.map(function (c) {
+    $('addCat').innerHTML = S.cats.map(function (c) {
       return '<option value="' + esc(c) + '"' + (c === S.cat ? ' selected' : '') + '>' + esc(c) + '</option>';
     }).join('');
     $('addOverlay').classList.add('show');
